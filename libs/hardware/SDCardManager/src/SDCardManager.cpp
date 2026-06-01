@@ -1,8 +1,10 @@
 #include "SDCardManager.h"
 
 namespace {
-constexpr uint8_t SD_CS = 12;
-constexpr uint32_t SPI_FQ = 40000000;
+constexpr uint8_t SD_CS = 11;
+// Keep SD SPI conservative during devkit/breadboard bring-up. The final PCB can
+// be raised once signal integrity is validated.
+constexpr uint32_t SPI_FQ = 4000000;
 }
 
 SDCardManager SDCardManager::instance;

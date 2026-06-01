@@ -79,9 +79,9 @@ class InputManager {
   static constexpr uint8_t BTN_POWER = 6;
 
   // Pins
-  static constexpr int BUTTON_ADC_PIN_1 = 1;
-  static constexpr int BUTTON_ADC_PIN_2 = 2;
-  static constexpr int POWER_BUTTON_PIN = 3;
+  static constexpr int BUTTON_ADC_PIN_1 = 2;
+  static constexpr int BUTTON_ADC_PIN_2 = 3;
+  static constexpr int POWER_BUTTON_PIN = 23;
 
   // Power button methods
   bool isPowerButtonPressed() const;

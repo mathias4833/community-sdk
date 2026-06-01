@@ -1,21 +1,11 @@
 #include "InputManager.h"
 
-// Recorded ADC values from real devices
-// BACK CONF LEFT RGHT   UP DOWN
-// 3597 2760 1530    6 2300    6
-// 3470 2666 1480    6 2222    5
-// 3470 2655 1470    3 2205    3
-
-// Averages
-// BACK CONF LEFT RGHT   UP DOWN
-// 3512 2694 1493    5 2242    5
-
-// Setup ranges, if ADC value is between value `i` and `i + 1`, button `i` is being pressed
-// These ranges are based on real world values above, and are much more tolerant of different
-// devices than a fixed threshold check
-// These values are calculated by taking the midpoint of the pairs of averaged values above
-const int InputManager::ADC_RANGES_1[] = {ADC_NO_BUTTON, 3100, 2090, 750, INT32_MIN};
-const int InputManager::ADC_RANGES_2[] = {ADC_NO_BUTTON, 1120, INT32_MIN};
+// Custom ESP32-C6 reader ADC ladders. Thresholds are midpoints between the
+// expected 12-bit ADC readings for each resistor ladder state.
+// left: none ~= 4095, button 1 ~= 2048, button 2 ~= 1024, button 3 ~= 0.
+// right: none ~= 4095, button 1 ~= 2048, button 2 ~= 0.
+const int InputManager::ADC_RANGES_1[] = {ADC_NO_BUTTON, 3072, 1536, 512, INT32_MIN};
+const int InputManager::ADC_RANGES_2[] = {ADC_NO_BUTTON, 3072, 1024, INT32_MIN};
 const char* InputManager::BUTTON_NAMES[] = {"Back", "Confirm", "Left", "Right", "Up", "Down", "Power"};
 
 InputManager::InputManager()
@@ -49,14 +39,14 @@ int InputManager::getButtonFromADC(const int adcValue, const int ranges[], const
 uint8_t InputManager::getState() {
   uint8_t state = 0;
 
-  // Read GPIO1 buttons
+  // Read left ADC ladder
   const int adcValue1 = analogRead(BUTTON_ADC_PIN_1);
   const int button1 = getButtonFromADC(adcValue1, ADC_RANGES_1, NUM_BUTTONS_1);
   if (button1 >= 0) {
     state |= (1 << button1);
   }
 
-  // Read GPIO2 buttons
+  // Read right ADC ladder
   const int adcValue2 = analogRead(BUTTON_ADC_PIN_2);
   const int button2 = getButtonFromADC(adcValue2, ADC_RANGES_2, NUM_BUTTONS_2);
   if (button2 >= 0) {
