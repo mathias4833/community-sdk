@@ -4,6 +4,10 @@
 #include <fstream>
 #include <vector>
 
+#ifndef EINK_SPI_MISO
+#define EINK_SPI_MISO -1
+#endif
+
 // SSD1677 command definitions
 // Initialization and reset
 #define CMD_SOFT_RESET 0x12            // Soft reset
@@ -491,7 +495,7 @@ void EInkDisplay::begin() {
     Serial.printf("[%lu]   Initializing e-ink display driver...\n", millis());
 
   // Initialize SPI with custom pins
-  SPI.begin(_sclk, -1, _mosi, _cs);
+  SPI.begin(_sclk, EINK_SPI_MISO, _mosi, _cs);
   const uint32_t spiHz = _x3Mode ? 16000000 : 40000000;
   spiSettings = SPISettings(spiHz, MSBFIRST, SPI_MODE0);
   if (Serial)

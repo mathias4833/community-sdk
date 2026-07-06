@@ -1,10 +1,15 @@
 #include "SDCardManager.h"
 
+#include <SPI.h>
+
 namespace {
+constexpr uint8_t SD_SCLK = 6;
+constexpr uint8_t SD_MISO = 10;
+constexpr uint8_t SD_MOSI = 7;
 constexpr uint8_t SD_CS = 11;
-// Keep SD SPI conservative during devkit/breadboard bring-up. The final PCB can
-// be raised once signal integrity is validated.
 constexpr uint32_t SPI_FQ = 4000000;
+constexpr uint8_t SD_INIT_ATTEMPTS = 5;
+constexpr uint16_t SD_INIT_RETRY_DELAY_MS = 100;
 }
 
 SDCardManager SDCardManager::instance;
@@ -12,14 +17,23 @@ SDCardManager SDCardManager::instance;
 SDCardManager::SDCardManager() : sd() {}
 
 bool SDCardManager::begin() {
-  if (!sd.begin(SD_CS, SPI_FQ)) {
-    if (Serial) Serial.printf("[%lu] [SD] SD card not detected\n", millis());
-    initialized = false;
-  } else {
-    if (Serial) Serial.printf("[%lu] [SD] SD card detected\n", millis());
-    initialized = true;
+  for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS; attempt++) {
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+
+    if (sd.begin(SdSpiConfig(SD_CS, SHARED_SPI | USER_SPI_BEGIN, SPI_FQ, &SPI))) {
+      if (Serial) Serial.printf("[%lu] [SD] SD card detected\n", millis());
+      initialized = true;
+      return initialized;
+    }
+
+    if (Serial) {
+      Serial.printf("[%lu] [SD] init attempt %u/%u failed\n", millis(), attempt, SD_INIT_ATTEMPTS);
+    }
+    delay(SD_INIT_RETRY_DELAY_MS);
   }
 
+  if (Serial) Serial.printf("[%lu] [SD] SD card not detected\n", millis());
+  initialized = false;
   return initialized;
 }
 
@@ -227,9 +241,14 @@ bool SDCardManager::openFileForRead(const char* moduleName, const String& path, 
 }
 
 bool SDCardManager::openFileForWrite(const char* moduleName, const char* path, FsFile& file) {
-  file = sd.open(path, O_RDWR | O_CREAT | O_TRUNC);
+  file = sd.open(path, O_WRITE | O_CREAT | O_TRUNC);
   if (!file) {
     if (Serial) Serial.printf("[%lu] [%s] Failed to open file for writing: %s\n", millis(), moduleName, path);
+    if (Serial) {
+      Serial.printf("[%lu] [%s] SdFat error code=0x%02X data=0x%02X\n", millis(), moduleName, sd.sdErrorCode(),
+                    sd.sdErrorData());
+      sd.printSdError(&Serial);
+    }
     return false;
   }
   return true;
