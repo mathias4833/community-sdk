@@ -82,6 +82,7 @@ class InputManager {
   static constexpr int BUTTON_ADC_PIN_1 = 2;
   static constexpr int BUTTON_ADC_PIN_2 = 3;
   static constexpr int POWER_BUTTON_PIN = 23;
+  static constexpr uint64_t DEEP_SLEEP_WAKEUP_PIN_MASK = (1ULL << BUTTON_ADC_PIN_1) | (1ULL << BUTTON_ADC_PIN_2);
 
   // Power button methods
   bool isPowerButtonPressed() const;
@@ -90,7 +91,9 @@ class InputManager {
   static const char* getButtonName(uint8_t buttonIndex);
 
  private:
-  int getButtonFromADC(int adcValue, const int ranges[], int numButtons);
+  int readAdcMedian(int adcPin) const;
+  int getButtonFromADC(int adcValue, const int expectedValues[], const int tolerances[], int numButtons);
+  uint8_t sanitizeState(uint8_t rawState) const;
 
   uint8_t currentState;
   uint8_t lastState;
@@ -103,14 +106,17 @@ class InputManager {
   unsigned long powerButtonPressFinish;
 
 
-  static constexpr int NUM_BUTTONS_1 = 4;
-  static const int ADC_RANGES_1[];
+  static constexpr int NUM_BUTTONS_1 = 3;
+  static const int ADC_EXPECTED_1[];
+  static const int ADC_TOLERANCE_1[];
 
   static constexpr int NUM_BUTTONS_2 = 2;
-  static const int ADC_RANGES_2[];
+  static const int ADC_EXPECTED_2[];
+  static const int ADC_TOLERANCE_2[];
 
-  static constexpr int ADC_NO_BUTTON = 3900;
-  static constexpr unsigned long DEBOUNCE_DELAY = 5;
+  static constexpr uint8_t ADC_SAMPLE_COUNT = 5;
+  static constexpr unsigned int ADC_SAMPLE_DELAY_US = 80;
+  static constexpr unsigned long DEBOUNCE_DELAY = 35;
 
   static const char* BUTTON_NAMES[];
 };

@@ -4,9 +4,27 @@
 // expected 12-bit ADC readings for each resistor ladder state.
 // left: none ~= 4095, button 1 ~= 2048, button 2 ~= 1024, button 3 ~= 0.
 // right: none ~= 4095, button 1 ~= 2048, button 2 ~= 0.
-const int InputManager::ADC_RANGES_1[] = {ADC_NO_BUTTON, 3072, 1536, 512, INT32_MIN};
-const int InputManager::ADC_RANGES_2[] = {ADC_NO_BUTTON, 3072, 1024, INT32_MIN};
+const int InputManager::ADC_EXPECTED_1[] = {2048, 1024, 0};
+const int InputManager::ADC_TOLERANCE_1[] = {600, 450, 350};
+const int InputManager::ADC_EXPECTED_2[] = {2048, 0};
+const int InputManager::ADC_TOLERANCE_2[] = {600, 350};
 const char* InputManager::BUTTON_NAMES[] = {"Back", "Confirm", "Left", "Right", "Up", "Down", "Power"};
+
+namespace {
+constexpr uint8_t NON_POWER_BUTTON_MASK = (1 << InputManager::BTN_BACK) | (1 << InputManager::BTN_CONFIRM) |
+                                          (1 << InputManager::BTN_LEFT) | (1 << InputManager::BTN_RIGHT) |
+                                          (1 << InputManager::BTN_UP) | (1 << InputManager::BTN_DOWN);
+constexpr uint8_t POWER_BUTTON_MASK = (1 << InputManager::BTN_POWER);
+
+uint8_t countBits(uint8_t value) {
+  uint8_t count = 0;
+  while (value != 0) {
+    count += value & 1;
+    value >>= 1;
+  }
+  return count;
+}
+}  // namespace
 
 InputManager::InputManager()
     : currentState(0),
@@ -26,9 +44,36 @@ void InputManager::begin() {
   analogSetAttenuation(ADC_11db);
 }
 
-int InputManager::getButtonFromADC(const int adcValue, const int ranges[], const int numButtons) {
+int InputManager::readAdcMedian(const int adcPin) const {
+  int samples[ADC_SAMPLE_COUNT];
+
+  // Discard one conversion after switching channels; ESP ADC readings can
+  // otherwise inherit charge from the previous channel and create ghost presses.
+  (void)analogRead(adcPin);
+
+  for (uint8_t i = 0; i < ADC_SAMPLE_COUNT; i++) {
+    delayMicroseconds(ADC_SAMPLE_DELAY_US);
+    samples[i] = analogRead(adcPin);
+  }
+
+  for (uint8_t i = 1; i < ADC_SAMPLE_COUNT; i++) {
+    const int value = samples[i];
+    uint8_t j = i;
+    while (j > 0 && samples[j - 1] > value) {
+      samples[j] = samples[j - 1];
+      j--;
+    }
+    samples[j] = value;
+  }
+
+  return samples[ADC_SAMPLE_COUNT / 2];
+}
+
+int InputManager::getButtonFromADC(const int adcValue, const int expectedValues[], const int tolerances[],
+                                   const int numButtons) {
   for (int i = 0; i < numButtons; i++) {
-    if (ranges[i + 1] < adcValue && adcValue <= ranges[i]) {
+    const int delta = adcValue >= expectedValues[i] ? adcValue - expectedValues[i] : expectedValues[i] - adcValue;
+    if (delta <= tolerances[i]) {
       return i;
     }
   }
@@ -36,29 +81,49 @@ int InputManager::getButtonFromADC(const int adcValue, const int ranges[], const
   return -1;
 }
 
+uint8_t InputManager::sanitizeState(const uint8_t rawState) const {
+  const uint8_t powerState = rawState & POWER_BUTTON_MASK;
+  const uint8_t rawButtons = rawState & NON_POWER_BUTTON_MASK;
+  const uint8_t heldButtons = currentState & NON_POWER_BUTTON_MASK;
+
+  if (rawButtons == 0) {
+    return powerState;
+  }
+
+  if (countBits(heldButtons) == 1) {
+    return heldButtons | powerState;
+  }
+
+  if (countBits(rawButtons) != 1) {
+    return powerState;
+  }
+
+  return rawButtons | powerState;
+}
+
 uint8_t InputManager::getState() {
-  uint8_t state = 0;
+  uint8_t rawState = 0;
 
   // Read left ADC ladder
-  const int adcValue1 = analogRead(BUTTON_ADC_PIN_1);
-  const int button1 = getButtonFromADC(adcValue1, ADC_RANGES_1, NUM_BUTTONS_1);
+  const int adcValue1 = readAdcMedian(BUTTON_ADC_PIN_1);
+  const int button1 = getButtonFromADC(adcValue1, ADC_EXPECTED_1, ADC_TOLERANCE_1, NUM_BUTTONS_1);
   if (button1 >= 0) {
-    state |= (1 << button1);
+    rawState |= (1 << button1);
   }
 
   // Read right ADC ladder
-  const int adcValue2 = analogRead(BUTTON_ADC_PIN_2);
-  const int button2 = getButtonFromADC(adcValue2, ADC_RANGES_2, NUM_BUTTONS_2);
+  const int adcValue2 = readAdcMedian(BUTTON_ADC_PIN_2);
+  const int button2 = getButtonFromADC(adcValue2, ADC_EXPECTED_2, ADC_TOLERANCE_2, NUM_BUTTONS_2);
   if (button2 >= 0) {
-    state |= (1 << (button2 + 4));
+    rawState |= (1 << (button2 + 4));
   }
 
   // Read power button (digital, active LOW)
   if (digitalRead(POWER_BUTTON_PIN) == LOW) {
-    state |= (1 << BTN_POWER);
+    rawState |= POWER_BUTTON_MASK;
   }
 
-  return state;
+  return sanitizeState(rawState);
 }
 
 void InputManager::update() {
