@@ -1728,6 +1728,10 @@ void EInkDisplay::refreshDisplay(const RefreshMode mode,
 
 void EInkDisplay::setCustomLUT(const bool enabled,
                                const unsigned char *lutData) {
+  // Keep custom waveforms from changing the border
+  sendCommand(CMD_BORDER_WAVEFORM);
+  sendData(enabled ? 0xC0 : 0x01);
+
   if (enabled) {
     if (Serial)
       Serial.printf("[%lu]   Loading custom LUT...\n", millis());
